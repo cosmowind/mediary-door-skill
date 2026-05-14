@@ -635,6 +635,71 @@ curl -s -H "Authorization: Bearer TOKEN" "BASE_URL/documents?page=1&limit=100"
 - 不要在代码仓库中硬编码 Token
 - 设备被撤销后 Token 立即失效
 
+## Document Bookmarks（文档书签）
+
+对于需要反复读写的固定文档，可以用"书签"方式管理：把文档 ID 存入配置，通过 block API 按需读取前 N 个 block，避免读取全文。
+
+### 工作原理
+
+- 每个文档的内容以 blocks 形式存储，block 按 position 排序
+- 新内容追加到文档顶部（position=0），旧内容自然下沉
+- AI Agent 只需读取前 N 个 block 即可获取最新需求，不会读到旧的结构化内容
+
+### 读取书签文档（前 N 个 block）
+
+```bash
+curl -s -H "Authorization: Bearer YOUR_TOKEN" \
+  "BASE_URL/blocks/document/8387" | python3 -c "
+import sys, json
+blocks = json.load(sys.stdin).get('data', [])
+for b in blocks[:5]:  # 只取前5个
+    print(f'[{b[\"block_type\"]}] {b[\"content\"][:200]}')
+"
+```
+
+### 追加内容到书签文档顶部
+
+```bash
+# 1. 先读取现有 blocks
+curl -s -H "Authorization: Bearer YOUR_TOKEN" \
+  "BASE_URL/blocks/document/8387" > /tmp/existing_blocks.json
+
+# 2. 在 Python 中构造新的 blocks 列表（新内容在前，旧内容在后）
+python3 -c "
+import json
+existing = json.load(open('/tmp/existing_blocks.json'))['data']
+new_blocks = [
+    {'block_type': 'heading', 'content': '新需求标题', 'level': 3},
+    {'block_type': 'list_item', 'content': '需求描述'},
+]
+all_blocks = new_blocks + existing
+print(json.dumps(all_blocks))
+" > /tmp/all_blocks.json
+
+# 3. 替换所有 blocks
+curl -s -X PUT "BASE_URL/blocks/document/8387" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d @/tmp/all_blocks.json
+```
+
+### 标记需求为 [done]
+
+在需求文本前加 `[done]` 前缀即可：
+
+```bash
+# 找到目标 block，修改 content 后 PUT 回去
+# 先读取 → 修改 → 替换全部 blocks
+```
+
+### 当前书签列表
+
+| 名称 | 文档 ID | 用途 | 建议读取 block 数 |
+|------|---------|------|-------------------|
+| mediary-dev-plan | 8387 | Mediary 开发需求计划 | 前 15 个（获取最新待做需求） |
+
+> 用户可通过对话告诉 Agent 新增/修改书签。Agent 应在 SKILL.md 的书签表中维护。
+
 ## Limitations
 
 - Token 对所有端点有效，暂无细粒度权限控制

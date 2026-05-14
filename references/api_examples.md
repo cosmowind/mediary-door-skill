@@ -1,16 +1,24 @@
 # Mediary API Examples
 
+> 使用前替换 `YOUR_BASE_URL` 和 `YOUR_API_KEY` 为实际值。
+
 ## curl 示例
 
 ### 验证连接
 ```bash
 curl -s -H "Authorization: Bearer YOUR_API_KEY" \
-  http://localhost:3000/api/v1/tags | jq .
+  "YOUR_BASE_URL/tags" | jq .
+```
+
+### 获取文档列表
+```bash
+curl -s -H "Authorization: Bearer YOUR_API_KEY" \
+  "YOUR_BASE_URL/documents?page=1&limit=5" | jq .
 ```
 
 ### 创建文档
 ```bash
-curl -X POST http://localhost:3000/api/v1/documents \
+curl -s -X POST "YOUR_BASE_URL/documents" \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -18,20 +26,25 @@ curl -X POST http://localhost:3000/api/v1/documents \
     "content": "这是正文内容...",
     "doc_type": "note",
     "source": "ai",
-    "created_at": "2024-05-10",
     "tags": ["AI", "草稿"]
   }' | jq .
 ```
 
 ### 搜索文档
 ```bash
-curl -s "http://localhost:3000/api/v1/documents/search?q=AI&type=note&limit=10" \
-  -H "Authorization: Bearer YOUR_API_KEY" | jq .
+curl -s -H "Authorization: Bearer YOUR_API_KEY" \
+  "YOUR_BASE_URL/documents/search?q=AI&type=note&limit=10" | jq .
+```
+
+### 获取单个文档
+```bash
+curl -s -H "Authorization: Bearer YOUR_API_KEY" \
+  "YOUR_BASE_URL/documents/123" | jq .
 ```
 
 ### 批量添加标签
 ```bash
-curl -X POST http://localhost:3000/api/v1/documents/bulk-add-tags \
+curl -s -X POST "YOUR_BASE_URL/documents/bulk-add-tags" \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"doc_ids": [1, 2, 3], "tags": ["AI"]}' | jq .
@@ -39,8 +52,8 @@ curl -X POST http://localhost:3000/api/v1/documents/bulk-add-tags \
 
 ### 列出所有标签
 ```bash
-curl -s http://localhost:3000/api/v1/tags \
-  -H "Authorization: Bearer YOUR_API_KEY" | jq .
+curl -s -H "Authorization: Bearer YOUR_API_KEY" \
+  "YOUR_BASE_URL/tags" | jq .
 ```
 
 ## Python 示例
@@ -49,8 +62,9 @@ curl -s http://localhost:3000/api/v1/tags \
 import requests
 
 API_KEY = "YOUR_API_KEY"
-BASE_URL = "http://localhost:3000/api/v1"
-HEADERS = {
+BASE_URL = "YOUR_BASE_URL"
+
+headers = {
     "Authorization": f"Bearer {API_KEY}",
     "Content-Type": "application/json"
 }
@@ -60,7 +74,7 @@ def search_documents(keyword, doc_type="note"):
     resp = requests.get(
         f"{BASE_URL}/documents/search",
         params={"q": keyword, "type": doc_type},
-        headers=HEADERS
+        headers=headers
     )
     return resp.json()
 
@@ -71,10 +85,14 @@ def create_document(title, content, doc_type="note", tags=None):
         "content": content,
         "doc_type": doc_type,
         "source": "ai",
-        "created_at": "2024-05-10",
         "tags": tags or []
     }
-    resp = requests.post(f"{BASE_URL}/documents", json=payload, headers=HEADERS)
+    resp = requests.post(f"{BASE_URL}/documents", json=payload, headers=headers)
+    return resp.json()
+
+# 获取文档
+def get_document(doc_id):
+    resp = requests.get(f"{BASE_URL}/documents/{doc_id}", headers=headers)
     return resp.json()
 
 # 批量添加标签
@@ -82,7 +100,7 @@ def bulk_add_tags(doc_ids, tags):
     resp = requests.post(
         f"{BASE_URL}/documents/bulk-add-tags",
         json={"doc_ids": doc_ids, "tags": tags},
-        headers=HEADERS
+        headers=headers
     )
     return resp.json()
 ```
@@ -91,7 +109,7 @@ def bulk_add_tags(doc_ids, tags):
 
 ```javascript
 const API_KEY = "YOUR_API_KEY";
-const BASE_URL = "http://localhost:3000/api/v1";
+const BASE_URL = "YOUR_BASE_URL";
 
 const headers = {
   "Authorization": `Bearer ${API_KEY}`,
@@ -114,34 +132,15 @@ async function createDocument(title, content, docType = "note", tags = []) {
     headers,
     body: JSON.stringify({
       title, content, doc_type: docType,
-      source: "ai", created_at: "2024-05-10", tags
+      source: "ai", tags
     })
   });
   return resp.json();
 }
-```
 
-## 错误处理示例
-
-```python
-import requests
-
-def safe_api_call(fn, *args, **kwargs):
-    try:
-        result = fn(*args, **kwargs)
-        if result.get("code") != 0:
-            print(f"API Error: {result.get('msg')}")
-        return result
-    except requests.exceptions.RequestException as e:
-        print(f"Network Error: {e}")
-        return None
-```
-
-## 认证失败示例
-
-```json
-// 401 Unauthorized
-{"code": 401, "msg": "Invalid or missing authentication token", "data": null}
-
-// 重新获取 Key 后重试
+// 获取单个文档
+async function getDocument(id) {
+  const resp = await fetch(`${BASE_URL}/documents/${id}`, { headers });
+  return resp.json();
+}
 ```

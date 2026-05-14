@@ -1,36 +1,43 @@
-# Mediary Skill for Hermes Agent
+# Mediary Door Skill
 
-让 AI Agent 通过 API Key 自主读写 Mediary 日记文档库的操作手册。
+Hermes Agent 技能：让 AI 通过 API Key 自主读写 Mediary 日记文档库。
 
 ## 安装
 
-将本仓库克隆到 Hermes Agent 的 skills 目录：
-
 ```bash
 cd ~/.hermes/skills/
-git clone https://github.com/cosmowind/hermes-skill-mediary.git mediary
+git clone https://github.com/cosmowind/mediary-door-skill.git mediary
 ```
 
-## 配置
+## 前置条件
 
-1. 登录你的 Mediary Web UI
+1. Mediary 后端已部署并运行
+2. 你有一个 Mediary 账号
+
+## 配置 API Key
+
+1. 登录 Mediary Web UI
 2. 进入「设备」页面 →「AI 接口密钥」tab
-3. 点击「生成 API Key」，复制保存
-4. 在 AI Agent 中使用该 Key 调用 API
+3. 点击「生成 API Key」
+4. **立即复制保存**（明文只显示一次）
 
 ## 使用
 
-安装后，Hermes Agent 会自动加载此 Skill。当对话涉及文档读写、日记管理时，Agent 会参考此手册调用 Mediary API。
+安装后，Hermes Agent 会自动加载此 Skill。当你让 AI 操作 Mediary 文档时，AI 会：
+
+1. 询问你的后端地址（如 `https://your-domain.com/api/v1`）
+2. 使用你的 API Key 调用 API
+3. 完成文档读写、搜索、标签管理等操作
 
 ### 支持的操作
 
-- 创建/读取/更新/删除文档
-- 搜索文档（关键词+标签+类型）
-- 标签管理（列出/创建/删除/批量操作）
-- 按日期范围筛选
+- 📝 创建/读取/更新/删除文档
+- 🔍 搜索文档（关键词 + 标签 + 类型 + 日期范围）
+- 🏷️ 标签管理（列出/创建/删除/批量操作）
+- 📋 获取文档列表（分页）
 
-## 要求
+## 安全说明
 
-- Mediary 后端已部署并运行
-- 用户已生成 API Key
-- `curl` 或任意 HTTP 客户端
+- API Key 通过 Bearer Token 传输，后端 bcrypt 哈希存储
+- 每个用户独立的 Key，可随时撤销重新生成
+- 不要在公开场合泄露你的 API Key

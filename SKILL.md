@@ -647,12 +647,16 @@ curl -s -H "Authorization: Bearer TOKEN" "BASE_URL/documents?page=1&limit=100"
 
 ### 读取书签文档（前 N 个 block）
 
+N 由用户指定，默认 10。用户可以在对话中说"读前5个block"或"看前20条需求"来调整。
+
 ```bash
+# N=5 示例：只看最新的 5 个 block
+N=5
 curl -s -H "Authorization: Bearer YOUR_TOKEN" \
   "BASE_URL/blocks/document/8387" | python3 -c "
 import sys, json
 blocks = json.load(sys.stdin).get('data', [])
-for b in blocks[:5]:  # 只取前5个
+for b in blocks[:$N]:
     print(f'[{b[\"block_type\"]}] {b[\"content\"][:200]}')
 "
 ```
@@ -696,7 +700,7 @@ curl -s -X PUT "BASE_URL/blocks/document/8387" \
 
 | 名称 | 文档 ID | 用途 | 建议读取 block 数 |
 |------|---------|------|-------------------|
-| mediary-dev-plan | 8387 | Mediary 开发需求计划 | 前 15 个（获取最新待做需求） |
+| mediary-dev-plan | 8387 | Mediary 开发需求计划（含prompt+done prompt合并，从新到旧） | 前 10 个（标题+最新需求） |
 
 > 用户可通过对话告诉 Agent 新增/修改书签。Agent 应在 SKILL.md 的书签表中维护。
 

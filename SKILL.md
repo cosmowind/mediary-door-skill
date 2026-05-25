@@ -119,8 +119,11 @@ Body: {
 ```
 
 #### Patch 更新文档（部分字段）
+
+**⚠️ 已知问题：** PATCH 端点可能返回 `Field validation for 'Patch' failed on the 'required' tag` 错误。如果遇到此问题，改用 PUT 全量更新（传入 title + doc_type + source 等完整字段）即可绕过。
+
 ```
-PATCH BASE_URL/documents/:id/patch
+PATCH $MEDIARY_BASE_URL/documents/:id/patch
 Body: {
   "title": "只更新标题"
 }

@@ -930,7 +930,7 @@ MEDIARY_BASE_URL=https://your-dev-domain.com/api/v1
 MEDIARY_API_KEY=your_api_key_here
 
 # GitHub 图床（可选，不配置则不转存图片）
-GITHUB_IMAGE_OWNER=YOUR_GITHUB_USERNAME
+GITHUB_IMAGE_OWNER=your_github_username
 GITHUB_IMAGE_REPO=YOUR_IMAGE_REPO
 GITHUB_IMAGE_BRANCH=main
 GITHUB_IMAGE_TOKEN=your_github_token_here

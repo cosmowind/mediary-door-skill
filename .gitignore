@@ -10,3 +10,10 @@ Thumbs.db
 # IDE files
 .vscode/
 .idea/
+
+# Personal information (should not be in public repo)
+references/transcription-context.md
+scripts/mediary-bookmarks.md
+
+# User-specific configs
+references/mediary-dev-deployment.md

@@ -1,20 +1,91 @@
 ---
 name: mediary
-description: 操作 Mediary 日记后端 API 的技能手册。用于 AI Agent 对接 Mediary 实现文档池读写，支持 JWT 鉴权、文档 CRUD、标签管理、搜索过滤。
+description: 操作 Mediary（别名：med/mediary/medairy/my diary/我的日记/日记本/文档池）日记系统的 API 技能手册。读取、搜索、写入文档，管理标签、番茄钟、Todo。触发词覆盖所有大小写和组合变形：med、Med、MED、mediary、Mediary、MEDIARY、medairy、medairy、Medairy、我的日记、我的diary、med文档、mediary文档、日记、日记本、文档池、i人大冒险（Mediary内标签）、以及任何其他指向 Mediary 文档池的表述。
 ---
 
 # Mediary Skill
+
+## ⚠️ 开发边界（最高优先级）
+
+**只操作 mediary-dev/（dev.7ygv.com）。riji.7ygv.com、mediary/、mediary/frontend/dist/ 一律不碰。**
+
+- mediary-dev/ = 开发环境（dev 分支，端口 9000）
+- mediary/ = 生产环境（main 分支，riji.7ygv.com），严禁操作
+- 详见 `wind-projects` skill 的"开发大原则"
+
 ## Purpose
 
 提供一份操作 Mediary 日记后端 API 的完整操作手册，使 AI Agent 能够通过 JWT 认证后自主完成文档读写、标签管理、搜索过滤等任务。
 
 ## When To Use
 
-- AI Agent 需要读取/写入用户日记文档
-- 将 Mediary 作为知识库被其他工具调用
-- 自动化文档整理、标签批处理、定时归档
+**触发条件（满足任一即应加载本 skill）：**
+- 用户询问"能查看 mediary/med/medairy 文档吗"
+- 用户说"帮我看看日记"、"搜一下 med 里的文档"
+- 用户提到"文档池"、"我的日记"且指向 Mediary 系统
+- 任何涉及 Mediary 文档读写、标签管理、番茄钟、Todo 的操作
+- 其他 AI 工具需要调用 Mediary 作为知识库时
+
+**不适用：**
+- 非 Mediary 系统的文档操作（Notion、飞书等有独立 skill）
 
 ## Quick Start
+
+### ⚠️ 标准化调用规范（必须遵守，每次必验）
+
+Mediary API 必须在 `execute_code` 中调用。**关键原则：`.env 文件不会自动加载，必须手动解析。`**
+
+```python
+# ✅ 正确做法：手动从 .env 文件读取配置
+import json, urllib.request, urllib.error
+
+env_path = "/root/.hermes/skills/mediary/.env"
+with open(env_path) as f:
+    for line in f:
+        if line.startswith("MEDIARY_API_KEY="):
+            api_key = line.strip().split("=", 1)[1]
+        elif line.startswith("MEDIARY_BASE_URL="):
+            base_url = line.strip().split("=", 1)[1]
+
+headers = {"Authorization": f"Bearer {api_key}"}
+
+def api_get(path):
+    req = urllib.request.Request(f"{base_url}{path}", headers=headers)
+    with urllib.request.urlopen(req) as resp:
+        return json.loads(resp.read())
+
+def api_put(path, body):
+    req = urllib.request.Request(
+        f"{base_url}{path}",
+        data=json.dumps(body).encode(),
+        headers={**headers, "Content-Type": "application/json"},
+        method="PUT"
+    )
+    with urllib.request.urlopen(req) as resp:
+        return json.loads(resp.read())
+
+def api_post(path, body):
+    req = urllib.request.Request(
+        f"{base_url}{path}",
+        data=json.dumps(body).encode(),
+        headers={**headers, "Content-Type": "application/json"},
+        method="POST"
+    )
+    with urllib.request.urlopen(req) as resp:
+        return json.loads(resp.read())
+```
+
+**❌ 错误做法（会导致 401）：**
+- 假设 `os.environ.get("MEDIARY_API_KEY")` 有值 → `execute_code` 不会加载 `.env`
+- 直接写 Bearer token 字符串 → token 容易过期/变更，应从文件读取
+
+**验证方法（每次调用前必做）：**
+```python
+# 先读一篇文档验证认证
+data = api_get("/documents?page=1&limit=1")
+assert data.get("code") == 0, f"认证失败: {data}"
+print("✅ 认证成功，文档数:", data.get("total"))
+```
 
 ### 1. 配置
 
@@ -271,6 +342,23 @@ Body: [
 - 标题：`"content": "## 标题文本"` ✅  `"content": "标题文本"` ❌（会被渲染成普通正文）
 - 加粗：`"content": "这是**重点**内容"` ✅
 - 列表：block_type=list_item 时，content 直接写列表项文本即可
+
+**🚨 表格和有序列表必须写在单个 paragraph block 中，不能拆行！**
+
+- 表格：所有行用 `\n` 连接，写成一个 paragraph block ✅
+  ```json
+  {"block_type": "paragraph", "content": "| 列1 | 列2 |\n|------|------|\n| 值1 | 值2 |"}
+  ```
+  ❌ 错误：每行一个 block → 前端无法渲染表格
+- 有序列表：带序号前缀 `1.` `2.` 写成一个 paragraph block ✅
+  ```json
+  {"block_type": "paragraph", "content": "1. **第一项**：说明\n2. **第二项**：说明"}
+  ```
+  也可以每个列表项用 `list_item` block type ✅
+  ```json
+  {"block_type": "list_item", "content": "第一项：说明"},
+  {"block_type": "list_item", "content": "第二项：说明"}
+  ```
 
 #### 完整写入流程（创建文档 + 写入 blocks）
 
@@ -657,6 +745,98 @@ Body: {"secret": "BASE32SECRET"}
 DELETE BASE_URL/totp/remove
 ```
 
+### API Key 管理
+
+> **⚠️ 单 Key 设计**：每个用户只有一个 API Key，生成新 Key 会使旧 Key 立即失效。
+> **存储方式**：bcrypt 哈希存储，明文只在生成时返回一次。同时存储 prefix/suffix 用于前端显示。
+
+#### GetApiKeyStatus 查询 API Key 状态
+```
+GET BASE_URL/api-key/status
+```
+返回当前用户的 API Key 状态（不暴露完整 key）：
+```json
+{
+  "code": 0,
+  "data": {
+    "has_key": true,
+    "prefix": "ff3",
+    "suffix": "6c",
+    "created_at": "2026-06-03T15:00:00Z"
+  }
+}
+```
+- `has_key=false` 时 prefix/suffix 为空字符串，created_at 为 null
+- 前端用 prefix + "..." + suffix 显示为 `ff3...6c` 格式
+
+#### CreateApiKey 生成 API Key
+```
+POST BASE_URL/api-key
+```
+**行为**：
+- 如果用户已有 Key → 返回 `{"has_existing_key": true, "message": "已有 API Key 存在，生成新 Key 将使旧 Key 失效"}`
+- 如果用户没有 Key → 生成新 Key，返回明文（只显示一次）
+```json
+{
+  "code": 0,
+  "data": {
+    "api_key": "ff358321d810...db6c",
+    "prefix": "ff3",
+    "suffix": "6c",
+    "message": "API Key 已生成，请妥善保管，明文不再显示"
+  }
+}
+```
+
+#### RegenerateApiKey 强制重新生成 API Key
+```
+PUT BASE_URL/api-key/regenerate
+```
+**⚠️ 旧 Key 立即失效！** 所有使用旧 Key 的 AI 工具将无法访问。
+```json
+{
+  "code": 0,
+  "data": {
+    "api_key": "new_key_here",
+    "prefix": "ab1",
+    "suffix": "xy9",
+    "message": "API Key 已重新生成，旧 Key 已失效"
+  }
+}
+```
+
+#### RevokeApiKey 撤销 API Key
+```
+DELETE BASE_URL/api-key
+```
+撤销后 `has_key` 变为 false，所有使用此 Key 的工具立即失效。
+
+#### Pitfall: 前端刷新后 Key 状态丢失
+- **问题**：DeviceManagement 页面（不是 TOTPManagement！）的 `hasApiKey` 状态每次 tab 切换重置为 false
+- **原因**：apikey tab 的 useEffect 缺少 `checkApiKeyStatus()` 调用
+- **修复**：`useEffect` 中当 `activeTab === "apikey"` 时调用 `authApi.getApiKeyStatus()` 初始化状态
+- **⚠️ 页面是 DeviceManagement.tsx（路由 /devices），不是 TOTPManagement.tsx**
+- **实现**：User 表新增 `api_key_prefix`、`api_key_suffix`、`api_key_create_at` 字段（需要数据库迁移）
+
+### ⚠️ 双认证中间件必须两条路径都注入 user_id（两个不同 bug）
+
+**Bug 1（2026-05-10）**：Handler 用 config 而非 context 获取用户
+- `GetApiKeyStatus` handler 最初用 `config.Auth.AdminEmail` 查找用户，导致 API 返回 401
+- 修复：改用 `c.Get("user_id")` 从 context 获取
+
+**Bug 2（2026-06-04）**：JWT 路径完全没注入 user_id
+- 症状：API Key 管理页面始终显示 `has_key: false`，但外部 AI 工具使用同一 Key 正常工作
+- 根因：`middleware/auth.go` 有两条认证路径——API Key 路径正确 `c.Set("user_id", user.ID)`，但 JWT 路径只检查设备黑名单就直接 `c.Next()`，漏掉了 user_id 注入
+- JWT claims 只有 `authorized` + `device_id`，没有 `user_id`。单用户系统需要通过 `config.Auth.AdminEmail` 反查用户注入 context
+- 修复：JWT 验证通过后增加 `userRepo.GetByEmail(config.Auth.AdminEmail)` → `c.Set("user_id", adminUser.ID)`
+- **教训**：双认证中间件的两条路径必须注入相同的 context 变量。API Key 登录正常但 JWT 登录异常时，优先检查中间件两条路径是否对称
+
+#### Pitfall: 单 Key 设计 vs 多 Key
+- 当前设计：一个用户只有一个 API Key
+- `SetApiKeyHash()` 直接覆盖旧 hash
+- 如果需要多 Key 支持，需要新建 `api_keys` 表（一对多关系）
+- 当前版本不支持多 Key，`CreateApiKey` 会返回 `has_existing_key` 提示
+
 ## Response Format
 
 所有接口返回统一 JSON 格式：
@@ -795,8 +975,6 @@ curl -s -X PUT "BASE_URL/blocks/document/8387" \
 
 ### 当前书签列表
 
-| 名称 | 文档 ID | 用途 | 建议读取 block 数 |
-|------|---------|------|-------------------|
 | mediary-dev-plan | 8387 | Mediary 开发需求计划（含prompt+done prompt合并，从新到旧） | 前 10 个（标题+最新需求） |
 
 > 用户可通过对话告诉 Agent 新增/修改书签。Agent 应在 SKILL.md 的书签表中维护。
@@ -860,6 +1038,29 @@ Layout 中同时注册了 `DocumentSidePanel` 和 `TodoSidePanel`，全局可用
 
 番茄钟的 `task` 字段通过 `<RichText text={tomato.task} />` 渲染，trace 字段也通过 `<RichText>` 渲染，均支持 `[[td:ID]]` 链接。旧的 `todo_id` 显示已移除，统一用 `[[td:ID]]` 格式。
 
+## Tailwind Preflight 重置 Markdown 元素样式
+
+Tailwind CSS v3+ 的 preflight 会移除 `<ol>`、`<ul>`、`<table>` 等元素的默认浏览器样式。使用 `.prose`（@tailwindcss/typography）渲染 Markdown 时，必须在 `@layer utilities` 中手动恢复：
+
+### 有序/无序列表序号丢失
+```css
+.prose ol { list-style-type: decimal; padding-left: 2rem; }
+.prose ul { list-style-type: disc; padding-left: 2rem; }
+.prose li { margin: 0.25rem 0; }
+```
+
+### 表格框线丢失
+```css
+.prose table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.9em; }
+.prose thead { border-bottom: 2px solid #d1d5db; }
+.prose th { border: 1px solid #d1d5db; background-color: #f3f4f6; padding: 0.5rem 0.75rem; text-align: left; font-weight: 600; }
+.prose td { border: 1px solid #d1d5db; padding: 0.5rem 0.75rem; }
+.prose tbody tr:nth-child(even) { background-color: #f9fafb; }
+```
+
+**CSS 文件位置**：`frontend/src/index.css`，放在 `@layer utilities` 块中。
+**注意**：修改后必须 `npm run build` 重新编译，然后部署 dist。
+
 ## Pitfalls
 
 ### [[id]] 文档链接导航会触发 auto-save 竞态
@@ -889,12 +1090,128 @@ Layout 中同时注册了 `DocumentSidePanel` 和 `TodoSidePanel`，全局可用
 
 ### Tailwind 动态类名陷阱
 - 模板字符串如 `` bg-${color}-500/20 `` 在构建时被 Tailwind purge 静默删除
+
+### ⚠️ DeviceManagement.tsx 才是 API Key/TOTP 的实际页面，不是 TOTPManagement.tsx
+- **路由**：`/devices` → `DeviceManagement.tsx`（在 App.tsx 中注册）
+- **TOTPManagement.tsx 存在但未被任何路由引用**，修改它不会影响用户看到的页面
+- DeviceManagement 用 tab 切换：`devices` | `totp` | `apikey`
+- **useEffect 依赖 activeTab**：`checkTOTPStatus()` 只在 `activeTab === "totp"` 时调用，`checkApiKeyStatus()` 只在 `activeTab === "apikey"` 时调用
+- **陷阱**：修改 TOTPManagement.tsx 后前端 build 成功、部署成功，但用户看到的页面完全没变化——因为那个组件根本没被使用
+- **教训**：改前端功能前，先 grep App.tsx 确认路由映射，找到真正被渲染的组件
+
+### API Key 前端 Tab 切换需要 useEffect 驱动状态加载
+- DeviceManagement 的 apikey tab 默认 `hasApiKey = false`
+- 切换到 apikey tab 时才调用 `checkApiKeyStatus()` 从后端获取真实状态
+- 如果缺少这个 useEffect，页面永远显示"未配置" + "生成 API Key"按钮
+- 后端 `GET /api-key/status` 返回 `{has_key, prefix, suffix, created_at}`
+- 旧 key（迁移前创建的）prefix/suffix 为空，后端返回 `"***"` 作为 fallback
+
+### ⚠️ 旧 API Key 缺少 prefix/suffix 导致显示 ***
+- 症状：API Key 页面显示 `***...***` 而非真实的前后3位
+- 根因：Key 在 prefix/suffix 功能上线前生成，当时代码只存了 `api_key_hash`
+- 修复：手动补全数据库 `UPDATE users SET api_key_prefix='xxx', api_key_suffix='xxx' WHERE email='...'`
+- `CreateApiKey` / `RegenerateApiKey` 已正确存储 prefix/suffix，以后新 Key 不会再出现此问题
+- **教训**：新增显示字段时，需要考虑已有数据的迁移方案
+- **修复旧 Key 显示 `***`**：直接更新数据库补上 prefix/suffix。Key 明文在 `~/.hermes/skills/mediary/.env` 的 `MEDIARY_API_KEY` 中，前3位是 prefix，后3位是 suffix。SQL: `UPDATE users SET api_key_prefix='xxx', api_key_suffix='yyy' WHERE email='...'`
+- **关键**：backend 代码（CreateApiKey/RegenerateApiKey）已正确存储 prefix/suffix，只有 Phase 11 上线前的旧 Key 需要手动补
+
+### ⚠️ 双认证中间件必须两条路径都注入 user_id
+- `middleware/auth.go` 有两条认证路径：API Key → bcrypt 验证，JWT → token 验证
+- **API Key 路径正确**：`c.Set("user_id", user.ID)` + `c.Set("email", user.Email)`
+- **JWT 路径曾遗漏**：只检查设备黑名单就直接 `c.Next()`，没有 set user_id
+- **后果**：所有依赖 `c.Get("user_id")` 的 handler（如 `GetApiKeyStatus`）在 JWT 登录后静默返回错误默认值（`has_key: false`）
+- **根因**：JWT claims 里只有 `authorized` + `device_id`，没有 `user_id`。单用户系统需要通过 `config.Auth.AdminEmail` 反查用户注入 context
+- **修复**：JWT 验证通过后增加 `userRepo.GetByEmail(config.Auth.AdminEmail)` → `c.Set("user_id", adminUser.ID)`
+- **教训**：修改双认证中间件时，必须确保两条路径注入相同的 context 变量，否则下游 handler 行为不一致且难以调试（API Key 登录正常、JWT 登录异常）
+## 项目结构与环境（⚠️ 重要）
+
+### 目录与域名对应
+
+| 目录路径 | Git分支 | 对应域名 | 说明 |
+|---------|--------|---------|------|
+| `/www/wwwroot/mediary/` | `dev`（当前） | `riji.7ygv.com`（生产） | ⚠️ 生产路径，但代码在 dev 分支 |
+| `/www/wwwroot/mediary-dev/` | `dev` | `dev.7ygv.com`（测试） | 测试环境，与 origin/dev 对齐 |
+
+**关键澄清**：
+- `mediary/` 是**生产路径**（riji），但跑 `dev` 分支（不是 `main`！）
+- `mediary-dev/` 是**测试路径**（dev.7ygv），代码也在 `dev` 分支
+- 两个目录都指向 `dev` 分支，没有实现 main/prod 分离
+
+### 当前状态（待 Wind 决策）
+
+- `/www/wwwroot/mediary/` 在 `dev` 分支，有未推送的本地 commits
+- `/www/wwwroot/mediary-dev/` 与 origin/dev 对齐
+- 生产目录（mediary/）应该改用 `main` 分支还是保持现状，需要 Wind 决策
+
+### 测试环境部署流程
+
+```bash
+# 1. 开发完成后 push 到 GitHub dev 分支
+cd /www/wwwroot/mediary/  # 或 mediary-dev/
+git add -A && git commit -m "feat: ..." && git push origin dev
+
+# 2. SSH 到服务器（需要 Wind 提供 SSH 登录信息）
+
+# 3. 在服务器上拉取最新代码
+cd /www/wwwroot/mediary-dev/
+git pull origin dev
+
+# 4. 重启后端
+pkill -f mediary-server && cd backend && go run . &
+
+# 5. 重建前端
+cd frontend && npm run build && cd ..
+
+# 6. 验证
+# 访问 dev.7ygv.com 检查功能
+```
+
+### 生产环境部署（必须用户授权！）
+
+用户说"可以推送到生产"之前，**绝对不能触碰** `/www/wwwroot/mediary/`。
+
+### SSH 部署凭据
+
+⚠️ **未记录**。需要 Wind 提供服务器 SSH 登录信息才能执行远程部署。
+
 ## Related Skills
 
 - **wechat-to-mediary** — 微信文章自动收录到 Mediary，支持图片转存到 GitHub 图床。详见 `wechat-to-mediary.md`。
+## Markdown 渲染架构
+
+Phase 1 已完成：集成 marked.js v18 渲染引擎，替换 react-markdown。
+
+- **渲染引擎**：`frontend/src/lib/md-renderer/`（插件式扩展架构）
+- **已支持**：代码高亮（highlight.js，20种语言）、`[[id]]` 文档链接、暗色模式主题
+- **两条渲染路径**：MarkdownRenderer（完整文档）+ BlockEditor（块内联渲染），修改时必须同时检查
+- **计划文档**：`docs/plans/2026-06-03-md-rendering-upgrade.md`
+- **Phase 2 待做**：KaTeX 数学公式 + Mermaid 图表
+- **Phase 3 待做**：GFM Alerts + 脚注 + 标记语法 + Ruby 注音 + TOC
+
 ## Limitations
 
 - Token 对所有端点有效，暂无细粒度权限控制
 - 文档内容无版本管理，覆盖更新需自行备份
 - 搜索为模糊匹配，无全文索引
 - `source` 字段只能是 `notion`/`feishu`/`local`，不支持自定义值
+
+## 实战经验（已踩过的坑）
+
+### Token 会过期
+存储的 API Key 过期后需要刷新：
+1. `POST /api/auth/send-code` 发送验证码（注意路径是 `/api/auth/` 不是 `/api/v1/auth/`）
+2. `POST /api/auth/login` 用验证码换取新 token
+
+### 中文 URL 编码
+Python urllib 处理含中文的 URL 会报 `UnicodeEncodeError`，建议用 subprocess curl 代替 urllib.request。
+
+### SharedDocument 渲染：blocks 优先级高于 content
+- `GET /api/shared/documents/:id` 返回的文档数据中，`content` 字段可能是简短摘要（几十个字符），真正的正文在 `blocks` 数组里（几百个 block）
+- 渲染时必须优先检查 `blocks.length > 0`，只有 blocks 为空时才 fallback 到 `content`
+- 错误优先级会导致页面只显示标题摘要，正文全部丢失
+- 教训：Mediary 的 `content` 字段是历史遗留的备份字段，前端渲染永远读 `blocks`
+
+### Blocks 格式铁律
+- 标题：content 需带 `##` markdown 语法，如 `"content": "## 标题"`
+- 表格：所有行用 `\n` 连接，写在单个 paragraph block 中
+- 图片：`"content": "![](图片URL)"`
